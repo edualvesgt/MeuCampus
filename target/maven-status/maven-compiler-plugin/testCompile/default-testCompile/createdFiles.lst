@@ -1,0 +1,8 @@
+com\escola\api\controller\ProfessorControllerIntegrationTest.class
+com\escola\api\service\MateriaServiceTest.class
+com\escola\api\service\UsuarioServiceTest.class
+com\escola\api\controller\MateriaControllerIntegrationTest.class
+com\escola\api\service\ProfessorServiceTest.class
+com\escola\api\service\AlunoServiceTest.class
+com\escola\api\EscolaApiApplicationTests.class
+com\escola\api\controller\UsuarioControllerIntegrationTest.class
