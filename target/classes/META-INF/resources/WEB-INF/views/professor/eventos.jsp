@@ -32,22 +32,16 @@
                 <div class="col-md-6 col-lg-4 mb-4">
                     <div class="card">
                         <div class="card-header">
-                            <h3>${evento.titulo}</h3>
+                            <h3>${evento.nome}</h3>
                         </div>
                         <div class="card-body">
-                            <p class="text-muted">${evento.descricao}</p>
+                            <p class="text-muted">${evento.informacoes}</p>
                             <div class="mb-2">
-                                <strong>Data:</strong> 
-                                <fmt:formatDate value="${evento.dataEvento}" pattern="dd/MM/yyyy HH:mm"/>
+                                <strong>Data:</strong> ${evento.data}
                             </div>
                             <div class="mb-2">
                                 <strong>Local:</strong> ${evento.local}
                             </div>
-                            <c:if test="${not empty evento.inscricoes}">
-                                <div class="mb-2">
-                                    <strong>Inscritos:</strong> ${evento.inscricoes.size()}
-                                </div>
-                            </c:if>
                         </div>
                     </div>
                 </div>

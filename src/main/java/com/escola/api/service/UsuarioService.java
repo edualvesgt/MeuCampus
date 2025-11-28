@@ -50,9 +50,22 @@ public class UsuarioService {
     }
     
     // Método para autenticação
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public Usuario autenticar(String email, String senha) {
-        return usuarioRepository.findByEmailAndSenha(email, senha)
+        Usuario usuario = usuarioRepository.findByEmailAndSenha(email, senha)
             .orElse(null);
+        
+        if (usuario != null) {
+            // Forçar carregamento dos relacionamentos
+            if (usuario.getProfessor() != null) {
+                usuario.getProfessor().getIdProfessor(); // Força o carregamento
+            }
+            if (usuario.getAluno() != null) {
+                usuario.getAluno().getIdAluno(); // Força o carregamento
+            }
+        }
+        
+        return usuario;
     }
     
     public Usuario buscarPorEmail(String email) {

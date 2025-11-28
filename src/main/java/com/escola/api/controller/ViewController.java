@@ -11,6 +11,8 @@ package com.escola.api.controller;
 import com.escola.api.model.Aluno;
 import com.escola.api.model.Evento;
 import com.escola.api.model.InscricaoEvento;
+import com.escola.api.model.Professor;
+import com.escola.api.model.Turma;
 import com.escola.api.model.Usuario;
 import com.escola.api.service.*;
 import jakarta.servlet.http.HttpSession;
@@ -36,6 +38,7 @@ public class ViewController {
     private final EventoService eventoService;
     private final NotificacaoService notificacaoService;
     private final InscricaoEventoService inscricaoEventoService;
+    private final ProfessorService professorService;
     
     // ========== LOGIN ==========
     @GetMapping("/")
@@ -55,29 +58,46 @@ public class ViewController {
     @PostMapping("/login")
     public String loginSubmit(@RequestParam String email, @RequestParam String senha, 
                              HttpSession session, Model model) {
-        // Autenticar usuário
-        Usuario usuario = usuarioService.autenticar(email, senha);
-        
-        if (usuario == null) {
-            model.addAttribute("erro", "Email ou senha inválidos");
+        try {
+            System.out.println("DEBUG LOGIN: Tentando autenticar - Email: " + email);
+            
+            // Autenticar usuário
+            Usuario usuario = usuarioService.autenticar(email, senha);
+            
+            if (usuario == null) {
+                System.out.println("DEBUG LOGIN: Usuário não encontrado ou senha incorreta");
+                model.addAttribute("erro", "Email ou senha inválidos");
+                return "login";
+            }
+            
+            System.out.println("DEBUG LOGIN: Usuário autenticado: " + usuario.getNome());
+            System.out.println("DEBUG LOGIN: É professor? " + (usuario.getProfessor() != null));
+            System.out.println("DEBUG LOGIN: É aluno? " + (usuario.getAluno() != null));
+            
+            // Salvar usuário na sessão
+            session.setAttribute("usuarioLogado", usuario);
+            
+            // Verificar tipo de usuário e redirecionar
+            if (usuario.getAluno() != null) {
+                // É aluno
+                System.out.println("DEBUG LOGIN: Redirecionando para dashboard do aluno");
+                session.setAttribute("alunoLogado", usuario.getAluno());
+                return "redirect:/aluno/dashboard";
+            } else if (usuario.getProfessor() != null) {
+                // É professor
+                System.out.println("DEBUG LOGIN: Redirecionando para dashboard do professor");
+                session.setAttribute("professorLogado", usuario.getProfessor());
+                return "redirect:/professor/dashboard";
+            } else {
+                // É admin ou outro tipo
+                System.out.println("DEBUG LOGIN: Redirecionando para dashboard do admin");
+                return "redirect:/admin/dashboard";
+            }
+        } catch (Exception e) {
+            System.err.println("ERRO NO LOGIN: " + e.getMessage());
+            e.printStackTrace();
+            model.addAttribute("erro", "Erro ao processar login: " + e.getMessage());
             return "login";
-        }
-        
-        // Salvar usuário na sessão
-        session.setAttribute("usuarioLogado", usuario);
-        
-        // Verificar tipo de usuário e redirecionar
-        if (usuario.getAluno() != null) {
-            // É aluno
-            session.setAttribute("alunoLogado", usuario.getAluno());
-            return "redirect:/aluno/dashboard";
-        } else if (usuario.getProfessor() != null) {
-            // É professor
-            session.setAttribute("professorLogado", usuario.getProfessor());
-            return "redirect:/professor/dashboard";
-        } else {
-            // É admin ou outro tipo
-            return "redirect:/admin/dashboard";
         }
     }
     
@@ -394,9 +414,22 @@ public class ViewController {
     @GetMapping("/professor/dashboard")
     public String professorDashboardView(HttpSession session, Model model) {
         try {
+            System.out.println("DEBUG DASHBOARD: Acessando dashboard do professor");
+            
             Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
-            if (usuario == null || usuario.getProfessor() == null) {
+            if (usuario == null) {
+                System.out.println("DEBUG DASHBOARD: Usuário não encontrado na sessão");
                 return "redirect:/login";
+            }
+            
+            System.out.println("DEBUG DASHBOARD: Usuário na sessão: " + usuario.getNome());
+            System.out.println("DEBUG DASHBOARD: Professor: " + usuario.getProfessor());
+            
+            // Verificar se é professor
+            if (usuario.getProfessor() == null) {
+                System.err.println("DEBUG DASHBOARD: Usuário não é um professor!");
+                model.addAttribute("erro", "Usuário não é um professor");
+                return "error";
             }
             
             String primeiroNome = usuario.getNome().split(" ")[0];
@@ -409,29 +442,118 @@ public class ViewController {
             model.addAttribute("professorNomeCompleto", usuario.getNome());
             model.addAttribute("professorInicial", iniciais);
             
-            // Buscar estatísticas
+            // Buscar estatísticas e dados com segurança
+            int totalTurmas = 0;
+            int totalAlunos = 0;
+            int totalEventos = 0;
+            
+            // Buscar dados de forma segura
             try {
-                int totalTurmas = usuario.getProfessor().getTurmas() != null ? usuario.getProfessor().getTurmas().size() : 0;
-                int totalAlunos = usuario.getProfessor().getTurmas() != null ? 
-                    usuario.getProfessor().getTurmas().stream()
-                        .mapToInt(t -> t.getMatriculas() != null ? t.getMatriculas().size() : 0)
-                        .sum() : 0;
+                // Buscar turmas do professor usando query direta
+                Professor professor = professorService.buscarPorId(usuario.getProfessor().getIdProfessor());
                 
-                model.addAttribute("totalTurmas", totalTurmas);
-                model.addAttribute("totalAlunos", totalAlunos);
-                model.addAttribute("totalEventos", eventoService.listarTodos().size());
+                if (professor != null && professor.getTurmas() != null) {
+                    totalTurmas = professor.getTurmas().size();
+                    
+                    // Criar lista simplificada
+                    java.util.List<java.util.Map<String, String>> turmasSimples = new java.util.ArrayList<>();
+                    int count = 0;
+                    for (Turma t : professor.getTurmas()) {
+                        if (count >= 2) break;
+                        java.util.Map<String, String> tm = new java.util.HashMap<>();
+                        tm.put("idTurma", t.getIdTurma().toString());
+                        tm.put("nome", t.getNome());
+                        tm.put("codigo", t.getCodigo() != null ? t.getCodigo() : "");
+                        tm.put("horario", t.getHorario() != null ? t.getHorario() : "");
+                        turmasSimples.add(tm);
+                        count++;
+                    }
+                    model.addAttribute("minhasTurmas", turmasSimples);
+                    
+                    // Contar alunos
+                    for (Turma t : professor.getTurmas()) {
+                        if (t.getMatriculas() != null) {
+                            totalAlunos += t.getMatriculas().size();
+                        }
+                    }
+                } else {
+                    model.addAttribute("minhasTurmas", java.util.Collections.emptyList());
+                }
+                
+                // Buscar eventos
+                java.util.List<Evento> eventos = eventoService.listarTodos();
+                totalEventos = eventos.size();
+                
+                java.util.List<java.util.Map<String, String>> eventosSimples = new java.util.ArrayList<>();
+                int ecount = 0;
+                for (Evento e : eventos) {
+                    if (ecount >= 2) break;
+                    java.util.Map<String, String> em = new java.util.HashMap<>();
+                    em.put("nome", e.getNome());
+                    em.put("data", e.getData() != null ? e.getData().toString() : "");
+                    em.put("local", e.getLocal() != null ? e.getLocal() : "");
+                    eventosSimples.add(em);
+                    ecount++;
+                }
+                model.addAttribute("proximosEventos", eventosSimples);
+                
             } catch (Exception e) {
-                model.addAttribute("totalTurmas", 0);
-                model.addAttribute("totalAlunos", 0);
-                model.addAttribute("totalEventos", 0);
+                System.err.println("Erro ao buscar dados: " + e.getMessage());
+                e.printStackTrace();
+                model.addAttribute("minhasTurmas", java.util.Collections.emptyList());
+                model.addAttribute("proximosEventos", java.util.Collections.emptyList());
             }
+            
+            model.addAttribute("totalTurmas", totalTurmas);
+            model.addAttribute("totalAlunos", totalAlunos);
+            model.addAttribute("totalEventos", totalEventos);
             
             return "layout-professor";
             
         } catch (Exception e) {
             System.err.println("Erro no dashboard do professor: " + e.getMessage());
             e.printStackTrace();
-            return "redirect:/login";
+            model.addAttribute("erro", "Erro ao carregar dashboard: " + e.getMessage());
+            return "error";
+        }
+    }
+    
+    // ========== PROFESSOR - DETALHES DA TURMA ==========
+    @GetMapping("/professor/turmas/{idTurma}")
+    public String professorTurmaDetalhes(@PathVariable UUID idTurma, HttpSession session, Model model) {
+        try {
+            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            if (usuario == null || usuario.getProfessor() == null) {
+                return "redirect:/login";
+            }
+            
+            String primeiroNome = usuario.getNome().split(" ")[0];
+            String iniciais = usuario.getNome().substring(0, Math.min(2, usuario.getNome().length())).toUpperCase();
+            
+            model.addAttribute("pageTitle", "Detalhes da Turma");
+            model.addAttribute("pageActive", "turmas");
+            model.addAttribute("contentPage", "professor/turma-detalhes.jsp");
+            model.addAttribute("professorNome", primeiroNome);
+            model.addAttribute("professorNomeCompleto", usuario.getNome());
+            model.addAttribute("professorInicial", iniciais);
+            
+            // Buscar turma
+            try {
+                Turma turma = turmaService.buscarPorId(idTurma);
+                model.addAttribute("turma", turma);
+            } catch (Exception e) {
+                System.err.println("Erro ao carregar turma: " + e.getMessage());
+                e.printStackTrace();
+                return "redirect:/professor/turmas";
+            }
+            
+            return "layout-professor";
+            
+        } catch (Exception e) {
+            System.err.println("Erro na página de detalhes da turma: " + e.getMessage());
+            e.printStackTrace();
+            model.addAttribute("erro", "Erro ao carregar detalhes da turma: " + e.getMessage());
+            return "error";
         }
     }
     
@@ -454,12 +576,18 @@ public class ViewController {
             model.addAttribute("professorNomeCompleto", usuario.getNome());
             model.addAttribute("professorInicial", iniciais);
             
-            // Buscar turmas do professor
+            // Buscar turmas do professor do banco
             try {
-                model.addAttribute("turmas", usuario.getProfessor().getTurmas() != null ? 
-                    usuario.getProfessor().getTurmas() : java.util.Collections.emptyList());
+                Professor professor = professorService.buscarPorId(usuario.getProfessor().getIdProfessor());
+                
+                if (professor != null && professor.getTurmas() != null) {
+                    model.addAttribute("turmas", professor.getTurmas());
+                } else {
+                    model.addAttribute("turmas", java.util.Collections.emptyList());
+                }
             } catch (Exception e) {
                 System.err.println("Erro ao carregar turmas: " + e.getMessage());
+                e.printStackTrace();
                 model.addAttribute("turmas", java.util.Collections.emptyList());
             }
             
@@ -469,6 +597,75 @@ public class ViewController {
             System.err.println("Erro na página de turmas: " + e.getMessage());
             e.printStackTrace();
             model.addAttribute("erro", "Erro ao carregar turmas: " + e.getMessage());
+            return "error";
+        }
+    }
+    
+    // ========== PROFESSOR - NOTIFICAÇÕES ==========
+    @GetMapping("/professor/notificacoes")
+    public String professorNotificacoes(HttpSession session, Model model) {
+        try {
+            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            if (usuario == null || usuario.getProfessor() == null) {
+                return "redirect:/login";
+            }
+            
+            String primeiroNome = usuario.getNome().split(" ")[0];
+            String iniciais = usuario.getNome().substring(0, Math.min(2, usuario.getNome().length())).toUpperCase();
+            
+            model.addAttribute("pageTitle", "Notificações");
+            model.addAttribute("pageActive", "notificacoes");
+            model.addAttribute("contentPage", "professor/notificacoes.jsp");
+            model.addAttribute("professorNome", primeiroNome);
+            model.addAttribute("professorNomeCompleto", usuario.getNome());
+            model.addAttribute("professorInicial", iniciais);
+            
+            // Buscar notificações
+            try {
+                model.addAttribute("notificacoes", notificacaoService.listarTodos());
+            } catch (Exception e) {
+                System.err.println("Erro ao carregar notificações: " + e.getMessage());
+                model.addAttribute("notificacoes", java.util.Collections.emptyList());
+            }
+            
+            return "layout-professor";
+            
+        } catch (Exception e) {
+            System.err.println("Erro na página de notificações: " + e.getMessage());
+            e.printStackTrace();
+            model.addAttribute("erro", "Erro ao carregar notificações: " + e.getMessage());
+            return "error";
+        }
+    }
+    
+    // ========== PROFESSOR - PERFIL ==========
+    @GetMapping("/professor/perfil")
+    public String professorPerfil(HttpSession session, Model model) {
+        try {
+            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            if (usuario == null || usuario.getProfessor() == null) {
+                return "redirect:/login";
+            }
+            
+            String primeiroNome = usuario.getNome().split(" ")[0];
+            String iniciais = usuario.getNome().substring(0, Math.min(2, usuario.getNome().length())).toUpperCase();
+            
+            model.addAttribute("pageTitle", "Meu Perfil");
+            model.addAttribute("pageActive", "perfil");
+            model.addAttribute("contentPage", "professor/perfil.jsp");
+            model.addAttribute("professorNome", primeiroNome);
+            model.addAttribute("professorNomeCompleto", usuario.getNome());
+            model.addAttribute("professorInicial", iniciais);
+            
+            model.addAttribute("professor", usuario.getProfessor());
+            model.addAttribute("usuario", usuario);
+            
+            return "layout-professor";
+            
+        } catch (Exception e) {
+            System.err.println("Erro na página de perfil: " + e.getMessage());
+            e.printStackTrace();
+            model.addAttribute("erro", "Erro ao carregar perfil: " + e.getMessage());
             return "error";
         }
     }

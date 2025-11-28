@@ -13,6 +13,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +21,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "tb_turma")
 @Data
+@ToString(exclude = {"professor", "matriculas", "eventos", "notificacoes"})
 @NoArgsConstructor
 @AllArgsConstructor
 public class Turma {
@@ -31,6 +33,14 @@ public class Turma {
     
     @Column(nullable = false)
     private String nome;
+    
+    private String codigo;
+    
+    private String periodo;
+    
+    private String horario;
+    
+    private String sala;
     
     @ManyToOne
     @JoinColumn(name = "id_professor", nullable = false)

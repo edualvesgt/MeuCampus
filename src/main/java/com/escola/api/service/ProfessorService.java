@@ -9,9 +9,11 @@ package com.escola.api.service;
  */
 
 import com.escola.api.model.Professor;
+import com.escola.api.model.Turma;
 import com.escola.api.repository.ProfessorRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -30,9 +32,23 @@ public class ProfessorService {
         return professorRepository.findAll();
     }
     
+    @Transactional(readOnly = true)
     public Professor buscarPorId(UUID id) {
-        return professorRepository.findById(id)
+        Professor professor = professorRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Professor não encontrado com id: " + id));
+        
+        // Forçar carregamento das turmas
+        if (professor.getTurmas() != null) {
+            professor.getTurmas().size();
+            // Forçar carregamento das matrículas de cada turma
+            professor.getTurmas().forEach(turma -> {
+                if (turma.getMatriculas() != null) {
+                    turma.getMatriculas().size();
+                }
+            });
+        }
+        
+        return professor;
     }
     
     public Professor atualizar(UUID id, Professor professorAtualizado) {
